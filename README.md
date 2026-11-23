@@ -23,6 +23,17 @@ which semantics are already there and which are missing.
 
 ## Where it comes from
 
+inferX continues a line of work that started with [RayX](https://github.com/byekrang/RayX), which
+asked how much of the distributed execution Ray is usually used for could run on HPX instead,
+especially for fine-grained AI and LLM workloads. RayX's experiment 70 established the HPX
+locality supervision that [langX](https://github.com/RohanOnKeys/langX) then used to run LangGraph
+agent steps fault-tolerantly. inferX takes the next step: from recomputable steps to resident
+state, such as an LLM's KV cache, that has to survive the loss of the HPX locality holding it,
+while keeping an outer layer like Ray to a minimum.
+
+RayX asked how far HPX can replace Ray. langX showed HPX supervision keeps stateless agent steps
+correct. inferX tests the same for state that lives on a locality.
+
 inferX follows [langX](https://github.com/RohanOnKeys/langX), which ran LangGraph nodes as HPX
 actions under supervision dispatch. langX covered stateless, recomputable steps: when a worker
 died, the step ran again elsewhere and the final state matched a stock LangGraph run. Its report
@@ -67,6 +78,8 @@ Early setup. No stage has results yet.
 
 ## Related work
 
+* [RayX](https://github.com/byekrang/RayX): how far HPX can replace Ray for distributed AI and
+  LLM workloads; experiment 70 introduced the HPX locality supervision used here.
 * [langX](https://github.com/RohanOnKeys/langX): durable LangGraph execution on HPX supervision
   dispatch (stateless steps).
 * [HPX](https://github.com/STEllAR-GROUP/hpx): the runtime this work builds on.
