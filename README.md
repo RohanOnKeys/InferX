@@ -11,7 +11,7 @@
 
 ## The question
 
-When an [HPX](https://github.com/STEllAR-GROUP/hpx) locality that holds resident state dies:
+When an [HPX](https://github.com/TheHPXProject/hpx) locality that holds resident state dies:
 
 * what logical state was lost,
 * can an older incarnation of that locality still produce results, and
@@ -61,7 +61,7 @@ Stages 3 and 4 each build on stage 2; their order is not fixed yet.
 ## Known HPX gaps that shape the design
 
 Two items found during langX are still open upstream
-([hpx#7834](https://github.com/STEllAR-GROUP/hpx/issues/7834)) and affect stateful recovery:
+([hpx#7834](https://github.com/TheHPXProject/hpx/issues/7834)) and affect stateful recovery:
 
 * A dispatch in flight to a killed locality never completes. InferX abandons such calls once HPX
   reports the target fenced.
@@ -70,12 +70,27 @@ Two items found during langX are still open upstream
 
 ## Status
 
-Early setup. No stage has results yet.
+Early setup. No stage has results yet. The experiment plan, with the failure scenarios, probes,
+gates and exit criteria of each stage, is in [`docs/plan.md`](docs/plan.md).
 
 | Item | Value |
 | --- | --- |
 | HPX | master `161df7fc6` |
 | Cluster | Rostam (LSU) |
+
+## Layout
+
+```text
+experiments/01_stateful_component/  stage 1: one stateful component under supervision
+bench/setup/                        Rostam environment and HPX build
+bench/check_md_links.py             markdown link check, run in CI
+docs/plan.md                        experiment plan: codes, design, failure matrices, gates, stages
+docs/reproduce.md                   the command and Rostam job behind every result
+docs/results/                       one write-up per stage, added with its first result
+```
+
+Builds and runs happen on Rostam; [`docs/reproduce.md`](docs/reproduce.md) has the setup. CI
+checks shell and Python syntax and markdown links only.
 
 ## Related work
 
@@ -83,4 +98,4 @@ Early setup. No stage has results yet.
   LLM workloads; experiment 70 introduced the HPX locality supervision used here.
 * [langX](https://github.com/RohanOnKeys/langX): durable LangGraph execution on HPX supervision
   dispatch (stateless steps).
-* [HPX](https://github.com/STEllAR-GROUP/hpx): the runtime this work builds on.
+* [HPX](https://github.com/TheHPXProject/hpx): the runtime this work builds on.

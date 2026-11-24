@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  repo-sanity:
+    name: Repo sanity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check shell syntax
+        # Syntax only: builds and runs need HPX and happen on Rostam.
+        run: find bench experiments -name '*.sh' -o -name '*.sbatch' | xargs -r -n1 bash -n
+
+      - name: Compile Python sources
+        run: find bench experiments -name '*.py' | xargs -r python -m py_compile
+
+      - name: Check local markdown links
+        run: python bench/check_md_links.py

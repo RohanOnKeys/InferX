@@ -1,9 +1,15 @@
-# Raw runs
+# Raw runs (curated results/*.json next to each experiment are tracked)
 _runs/
+*.jsonl
 
 # Builds
 build/
 build-*/
+build_*/
+
+# Job logs
+*.log
+*_[0-9]*.out
 
 # Python
 __pycache__/
