@@ -1,12 +1,13 @@
 <p align="center">
-  <img src="docs/assets/inferx-banner.png" alt="InferX" width="640">
+  <img src="docs/assets/inferx-banner.png" alt="InferX" width="100%">
 </p>
+
+---
 
 <p align="center">
   Stateful inference on HPX supervision dispatch: recoverable resident state across HPX localities.
 </p>
 
----
 
 ## The question
 
@@ -52,7 +53,7 @@ host is lost.
 | --- | --- |
 | 1 | C++ reproducer: one stateful component under supervision; kill its host; record what clients, name lookups and admission see |
 | 2 | Stateful 1D stencil: partitions as components, an owner epoch per partition, recovery from snapshots, a failure matrix with pass/fail gates |
-| 3 | Octo-Tiger: the same recovery on a real application |
+| 3 | Octo-Tiger: the same recovery on a real application (planned , unconfirmed) |
 | 4 | LLM runtime with a resident KV cache on an open model |
 
 Stages 3 and 4 each build on stage 2; their order is not fixed yet.
