@@ -19,6 +19,15 @@ resident state under test.
 | F6 | Kill during snapshot | SIGKILL a host while it takes a snapshot (stage 2) |
 | F7 | Kill neighbours | SIGKILL the hosts of two adjacent partitions in one step (stage 2) |
 
+Stage 1 follow-up variants (section 7.5):
+
+| Code | Variant | What is done |
+| --- | --- | --- |
+| J0 | Late joiner | No failure; a new locality joins after the clients, binds its own name and pings the root and the client first |
+| J0q | Quiet late joiner | J0 without the joiner's first pings |
+| F5a | Replace without removal | F5 without the root's `force_disconnect` of the dead host |
+| F5b | Quiet replacement | F5 without the replacement's first pings |
+
 Probes: what stage 1 records after each scenario (section 7.2).
 
 | Code | Probe | Records |
@@ -29,6 +38,7 @@ Probes: what stage 1 records after each scenario (section 7.2).
 | P4 | Name lookup | `find_from_basename` for the component's name, and P1 on the id it returns |
 | P5 | Zombie answer | Whether a resumed host answers P1 and P2, seen from the client that observed the fence and from one that did not |
 | P6 | Name takeover | Whether a replacement can bind the dead host's name, with and without unregistering it first, and what P4 returns afterwards |
+| J4 | Joiner lookup | P4 for the joiner's own name, and P1 on the id it returns (J0, J0q) |
 
 Gates: checks every stage 2 run must pass (section 9).
 
@@ -354,9 +364,13 @@ localities can reach, so the cause is separated first, 30 trials each:
 
 | Variant | What it separates |
 | --- | --- |
-| Late joiner, no failure | Whether any locality that connects after the clients is unreachable |
-| F5 without the root's `force_disconnect` | Whether removing the dead host matters |
-| F5 without the replacement's pings | Whether the replacement's own first contact matters (1 of 2 smoke trials without them reached it) |
+| J0 | Whether any locality that connects after the clients is unreachable |
+| J0q | The same, without the joiner's first contact |
+| F5a | Whether removing the dead host matters |
+| F5b | Whether the replacement's own first contact matters (1 of 2 smoke trials without it reached the replacement) |
+
+Each trial records the client's known localities, a ping to the root as control, a ping to the new
+locality, and a call on the new component found by name, from both clients.
 
 If a variant isolates an HPX behaviour, it is drafted as an upstream issue with a reproducer.
 
