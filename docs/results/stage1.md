@@ -20,6 +20,11 @@ Codes used in this document (full list: [plan, codes](../plan.md#codes)):
 | H2 | a name bound by a killed host stays bound to the dead id |
 | H3 | a resumed zombie host still answers; only a check above HPX rejects its results |
 | H4 | a replacement can take over a dead host's name only after the old binding is removed |
+| J0 | late joiner: no failure; a new locality joins after the clients and pings the root and the client first |
+| J0q | J0 without the joiner's first pings |
+| F5a | F5 without the root's `force_disconnect` of the dead host |
+| F5b | F5 without the replacement's first pings |
+| J4 | joiner lookup: P4 for the joiner's own name, then P1 on the id it returns |
 
 **Date:** 2026-11-26. **Cluster:** Rostam, partition `medusa`, node medusa00, one node per job.
 **HPX:** master `161df7fc6a85baa20b915894d4d07c83186cccbc`. **Plan:**
@@ -43,10 +48,12 @@ Code: [`experiments/01_stateful_component/`](../../experiments/01_stateful_compo
   calls from both clients with the state it held (`value:5`); fenced dispatch refuses it, and
   `force_disconnect` cuts it off for everyone (H3 holds).
 * **A replacement takes over the name only after unregistering the old binding** (H4 holds).
-* **New finding: existing localities cannot reach the replacement.** The replacement reaches the
-  root and the client within 1 ms, and the client lists the replacement among its localities, yet
-  no call from the client or the second client reaches the replacement, not even a plain ping, 30 s
-  later. 30 of 30 trials. The cause is not established.
+* **New finding: after `force_disconnect`, existing localities cannot reach a locality that joins
+  later.** In F5 the replacement reaches the root and the client within 1 ms, yet no call from
+  either client reaches the replacement, not even a plain ping at 30 s (30/30). The follow-up
+  variants isolate the trigger: without the root's `force_disconnect`, or with no failure at all,
+  every call reaches the newcomer (180/180); with it, 2 of 120 do (F5 and F5b). Whether the newcomer contacts the
+  clients first makes no difference. Why the removal has this effect is not established.
 
 ## Setup
 
@@ -66,6 +73,8 @@ Code: [`experiments/01_stateful_component/`](../../experiments/01_stateful_compo
 | 225622 | `3597e17` | smoke, 2 trials per scenario; results used, probe times not (see "Harness problems") |
 | 225623 | `7e6f02a` | smoke, 2 trials per scenario, valid times |
 | 225624 | `4b0e943` | full run, 30 trials per scenario, 1 h 13 min 51 s; every number below unless stated |
+| 225626 | `d3f1b8a` | follow-up variants J0, J0q, F5a, F5b, smoke, 2 trials each |
+| 225632 | `d3f1b8a` | follow-up variants, 30 trials each, 17 min 40 s |
 
 ## Results (job 225624, 30 trials each)
 
@@ -143,14 +152,36 @@ existing locality can reach the replacement, while the replacement reaches both.
 In smoke job 225623, which did not yet have the replacement's pings to the root and the client, one
 of two F5 trials reached the replacement (ping `value:4`, call `value:0`) and one did not.
 
-## Hypotheses
+## Follow-up: reaching a newcomer (job 225632, 30 trials each)
+
+Plan section 7.5. Each variant changes one thing relative to F5. The newcomer is locality 4 in
+every trial. "Reached" means the client's plain ping to locality 4 answered `value:4` and the call
+on the component found by name answered `value:0`; each count is out of 30.
+
+| Variant | Host killed | Root's `force_disconnect` before the newcomer joins | Newcomer pings first | Client reached | client2 reached |
+| --- | --- | --- | --- | --- | --- |
+| J0 | no | no | yes | 30 | 30 |
+| J0q | no | no | no | 30 | 30 |
+| F5a | yes | no | yes | 30 | 30 |
+| F5b | yes | yes | no | 2 | 0 |
+| F5 (job 225624) | yes | yes | yes | 0 | 0 |
+
+In every variant the client's ping to the root answered `value:0`, and the newcomer's call on its
+own component answered `value:0`. In F5a the client still lists the dead host's locality
+(`0,1,2,3,4`); after the root's `force_disconnect` it does not (`0,2,3,4`). In F5b the client's ping
+and its call each reached the newcomer in 2 trials; whether these are the same 2 trials is not
+shown by the summary.
+
+The newcomer is reachable whenever the dead host was not removed before it joined, and almost
+never when it was (2 of 60 calls across both clients in F5b, 0 of 60 in F5). The newcomer's own
+first contact does not change this.
 
 | ID | Outcome |
 | --- | --- |
 | H1 | Falsified for new calls: they fail in 2 ms with `locality_was_disconnected` while the host is only fenced. Holds for calls in flight at the kill, which stay unanswered at 30 s |
 | H2 | Holds, 30/30, after the fence and after `force_disconnect` |
 | H3 | Holds, 30/30: the zombie answers plain calls from both clients with its state; fenced dispatch refuses it |
-| H4 | Holds, 30/30, for the name. The new owner is then unreachable from existing localities (above) |
+| H4 | Holds, 30/30, for the name. The new owner is then unreachable from existing localities when the dead host was force-disconnected first (follow-up above) |
 
 ## Harness problems found on the way
 
@@ -161,10 +192,14 @@ of two F5 trials reached the replacement (ping `value:4`, call `value:0`) and on
 
 ## Not established
 
-* Why existing localities cannot reach a locality that connects after the host was killed and
-  removed. Not separated yet: whether the earlier kill and `force_disconnect` matter, whether a
-  locality that connects late without any failure is reachable, and whether the replacement's own
-  pings to the client change the outcome (0/30 with them, 1/2 without in the smoke run).
+* Why the root's `force_disconnect` of a dead locality stops existing localities from reaching a
+  locality that joins later. The trigger is isolated (follow-up above); the mechanism is not. An
+  inference from the source: `force_disconnect` changes each locality's record of resolved and
+  disconnecting localities in `addressing_service`, and that state may stop a new connection to a
+  later locality. Not measured.
+* Whether a replacement that joins before the dead host is removed stays reachable after the
+  removal. Stage 2 would recover in that order; not run yet.
+* Why 2 of 30 F5b trials, and 1 of 2 F5 smoke trials (job 225623), reached the newcomer.
 * Why a new call fails in 2 ms before `force_disconnect`. The error name matches the parcelport's
   record of a disconnected locality in `addressing_service::resolve_locality`; that the TCP
   connection reset sets this record is an inference from the source, not measured.
@@ -183,18 +218,20 @@ Claims, each from 30/30 trials of job 225624 on HPX `161df7fc6`, one node, poll 
 * A resumed frozen host answers plain calls with the state it held, to a client that observed the
   fence and to one that did not; the root's `force_disconnect` stops that.
 * A replacement can bind the name after unregistering it, and lookups then return the new id.
-* In this setup, existing localities do not reach the replacement locality.
+* After the root force-disconnects a dead locality, existing localities reach a locality that
+  joins later in 2 of 120 calls (F5 and F5b, both clients); without that removal, or with no
+  failure, in 180 of 180 (J0, J0q, F5a, both clients). The newcomer reaches existing localities in
+  every case.
 
 Not claimed:
 
-* Any cause for the unreachable replacement.
-* That the reachability result holds without the earlier kill and `force_disconnect`, or across
-  nodes.
+* A mechanism for the unreachable newcomer.
+* That the reachability result holds across nodes or on other HPX commits.
 * Anything about the state itself beyond what the probes read: the zombie's answer was checked
   through the counter only.
 
 ## Next step
 
-Separate the reachability causes before stage 2 depends on a replacement: a locality that connects
-late with no failure in the run; F5 without the root's `force_disconnect`; F5 without the
-replacement's pings. Then stage 2.
+Run the order stage 2 would use: the replacement joins first, then the root removes the dead host,
+then the clients call the replacement. Write a minimal reproducer of the unreachable newcomer for
+an upstream issue. Then stage 2.

@@ -67,8 +67,8 @@ Source tags: **[langX]** marks a behaviour measured in langX; **[src]** marks a 
 the HPX source at `161df7fc6` and not yet measured; **[s1]** to **[s4]** mark a behaviour measured
 in that InferX stage.
 
-Status: stage 1 done ([`results/stage1.md`](results/stage1.md)), with one follow-up open
-(section 7.5); stage 2 next. This plan is the single source of truth for scope; findings from each
+Status: stage 1 done ([`results/stage1.md`](results/stage1.md)); its follow-up (section 7.5)
+isolated the trigger of the unreachable replacement; stage 2 next. This plan is the single source of truth for scope; findings from each
 stage are folded back into it.
 
 ---
@@ -218,7 +218,7 @@ Job 225624, 30 trials per scenario, one node, poll timeout 500 ms; full tables i
 | Resumed zombie | Answers plain calls with its full state, to both clients; `force_disconnect` cuts it off | [s1] |
 | Brief freeze (200 ms) | No fence | [s1] |
 | Name takeover | Bind refused while the old binding exists; unregister returns the dead id; rebind succeeds; lookups return the new id | [s1] |
-| Reaching the replacement | The replacement reaches the root and the client in 0 to 1 ms; neither existing client reaches the replacement, not even a plain ping at 30 s, although it lists the replacement's locality. Cause not established | [s1] |
+| Reaching a newcomer | After the root force-disconnects a dead locality, existing localities reach a locality that joins later in 2 of 120 calls; without that removal, or with no failure, in 180 of 180. The newcomer reaches them in every case. Mechanism not established | [s1] |
 
 ### 3.5 Design rules that follow
 
@@ -374,6 +374,12 @@ locality, and a call on the new component found by name, from both clients.
 
 If a variant isolates an HPX behaviour, it is drafted as an upstream issue with a reproducer.
 
+Result (job 225632, 30 trials each): J0, J0q and F5a reach the newcomer in 30/30 trials from both
+clients; F5b in 2/30 from the client and 0/30 from client2. The trigger is the root's
+`force_disconnect` of the dead locality before the newcomer joins; the newcomer's first contact does
+not matter. Remaining: the order stage 2 would use (replacement joins, then removal, then calls),
+and a minimal reproducer for upstream.
+
 ---
 
 ## 8. Stage 2: stateful 1D stencil
@@ -479,7 +485,7 @@ Stages run in order; each ends with a write-up in `docs/results/`.
 
 | Stage | Exit criterion |
 | --- | --- |
-| 1: stateful component | Section 7.4; met, follow-up 7.5 open |
+| 1: stateful component | Section 7.4; met. Follow-up 7.5: trigger isolated, removal order and reproducer open |
 | 2: stateful 1D stencil | Section 8.6 |
 | 3: Octo-Tiger | The stage 2 recovery on a real application; criterion set after stage 2 |
 | 4: LLM runtime with resident KV cache | Recovery of a request's KV cache on an open model; criterion set after stage 2 |
@@ -512,7 +518,7 @@ stage NN; `bench/setup/` the Rostam environment and HPX build; `docs/` the plan,
 | --- | --- | --- |
 | Calls in flight to a dead host never return [s1] | High | Bound every wait; abandon on fence (3.5) |
 | Names outlive their host [s1] | High | Ownership table is authoritative (3.5 rule 6); the replacement unregisters and rebinds (8.2) |
-| Existing localities cannot reach a replacement locality [s1] | High | Follow-up 7.5 before stage 2 depends on a replacement |
+| Existing localities cannot reach a locality that joins after a `force_disconnect` [s1] | High | Stage 2 joins spare hosts before any failure, or removes the dead host only after the replacement has joined (7.5) |
 | Snapshot needs the component local [src] | Medium | Each host snapshots its own components and sends the value (6.3) |
 | Global rollback hides per-partition costs | Medium | Report recomputed steps; compare local recovery later |
 | Detection too slow without the testing hook | Medium | Report the hook value |
@@ -529,8 +535,8 @@ stage NN; `bench/setup/` the Rostam environment and HPX build; `docs/` the plan,
 3. Is unregister then register the intended way for a replacement to take over a name?
 4. Would an "is epoch E still live for target T" check at completion time fit in HPX?
 5. Should admission reject an epoch that does not match the target's current epoch (hpx#7834)?
-6. Is a locality that connects after another one was killed and removed meant to be reachable
-   from the localities already running (section 7.5)?
+6. After `force_disconnect` of a dead locality, localities already running almost never reach a
+   locality that connects later, while it reaches them (section 7.5). Is that expected?
 
 ---
 
