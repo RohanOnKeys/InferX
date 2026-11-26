@@ -18,7 +18,7 @@ Codes used in this document (full list: [plan, codes](../../docs/plan.md#codes))
 | P6 | name takeover: whether a replacement can bind the dead host's name, with and without unregistering first |
 | H1 to H4 | stage 1 hypotheses, [plan section 4](../../docs/plan.md#4-hypotheses) |
 
-**Status:** not started. Design: [plan section 7](../../docs/plan.md#7-stage-1-one-stateful-component-under-supervision).
+**Status:** harness written, not yet run. Design: [plan section 7](../../docs/plan.md#7-stage-1-one-stateful-component-under-supervision).
 HPX: master `161df7fc6`.
 
 ## Question
@@ -56,10 +56,30 @@ trials per scenario, full runs 30, all on one node.
 Expected answers, with the reason for each, are in
 [plan section 7.3](../../docs/plan.md#73-matrix).
 
-## Approach
+## Contents
 
-One C++ binary with the five roles, started by a bash runner with handshake files on one node,
-following langX
-[`bench/hpx_repro/`](https://github.com/RohanOnKeys/langX/tree/main/bench/hpx_repro). Each probe
-prints one `R:` line. Results go to `docs/results/stage1.md`, and the job behind each one to
-[`docs/reproduce.md`](../../docs/reproduce.md).
+| Path | Purpose |
+| --- | --- |
+| `stateful_component.cpp` | the harness: one binary with the five roles, the `state_holder` component and the probes |
+| `run_stage1.sh` | runs one scenario a given number of trials on one host and prints the `R:` lines |
+| `stage1.sbatch` | builds the harness against `HPX_INSTALL` and runs the scenarios on one Rostam node |
+| `CMakeLists.txt` | standalone build; needs only an HPX install with supervision |
+| `_runs/` | raw output per job, ignored by git |
+
+The process scaffolding follows langX
+[`bench/hpx_repro/`](https://github.com/RohanOnKeys/langX/tree/main/bench/hpx_repro).
+
+## Running
+
+From the repository root on Rostam:
+
+```bash
+. bench/setup/rostam_env.sh
+sbatch experiments/01_stateful_component/stage1.sbatch                        # smoke: 2 trials each
+TRIALS=30 sbatch --time=06:00:00 experiments/01_stateful_component/stage1.sbatch   # full run
+```
+
+`SCENARIOS="F1 F3"` narrows a run. Each probe prints one line,
+`R: scenario=<F> phase=<phase> probe=<P> role=<role> result=<r> t_ms=<t>`, and each trial ends with
+a `RESULT` line giving the client's exit. Results go to `docs/results/stage1.md`, and the job behind
+each one to [`docs/reproduce.md`](../../docs/reproduce.md).
