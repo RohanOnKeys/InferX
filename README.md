@@ -70,7 +70,8 @@ Two items found during langX are still open upstream
 
 ## Status
 
-Early setup. No stage has results yet. The experiment plan, with the failure scenarios, probes,
+Stage 1 is done: [`docs/results/stage1.md`](docs/results/stage1.md). Stage 2 is next, after one
+follow-up on reaching a replacement locality. The experiment plan, with the failure scenarios, probes,
 gates and exit criteria of each stage, is in [`docs/plan.md`](docs/plan.md).
 
 | Item | Value |

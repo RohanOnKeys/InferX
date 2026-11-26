@@ -57,8 +57,9 @@ Source tags: **[langX]** marks a behaviour measured in langX; **[src]** marks a 
 the HPX source at `161df7fc6` and not yet measured; **[s1]** to **[s4]** mark a behaviour measured
 in that InferX stage.
 
-Status: setup. No stage has results yet. This plan is the single source of truth for scope;
-findings from each stage are folded back into it.
+Status: stage 1 done ([`results/stage1.md`](results/stage1.md)), with one follow-up open
+(section 7.5); stage 2 next. This plan is the single source of truth for scope; findings from each
+stage are folded back into it.
 
 ---
 
@@ -176,7 +177,8 @@ Measured in langX. The commit is stated for each row; rows marked "both" were me
 
 ### 3.3 What the source says about host loss
 
-Read in the HPX source at `161df7fc6`. Stage 1 measures each row.
+Read in the HPX source at `161df7fc6`. Rows that stage 1 measured are repeated with the result in
+3.4.
 
 | Topic | Reading | Source |
 | --- | --- | --- |
@@ -192,7 +194,23 @@ Read in the HPX source at `161df7fc6`. Stage 1 measures each row.
 | Migration | `hpx::components::migrate` moves a live component; it gives nothing once the source is dead | [src] |
 | Resiliency | Distributed `async_replay` re-runs an action on the next locality when a call fails; it is a retry for stateless actions and depends on the failed call returning an error | [src] |
 
-### 3.4 Design rules that follow
+### 3.4 Measured in stage 1
+
+Job 225624, 30 trials per scenario, one node, poll timeout 500 ms; full tables in
+[`results/stage1.md`](results/stage1.md).
+
+| Topic | Finding | Source |
+| --- | --- | --- |
+| New call to a killed, fenced host | Fails in 2 ms with `locality_was_disconnected`, before `force_disconnect`, from a client that joined the host and from one that did not | [s1] |
+| Call in flight at the kill | Plain and fenced: no answer at 30 s | [s1] |
+| Fenced dispatch and admission after the fence | `target_fenced` and `rejected_fenced`, also after the host resumes | [s1] |
+| Name of a dead host's component | Still bound to the dead id after the fence and after `force_disconnect` | [s1] |
+| Resumed zombie | Answers plain calls with its full state, to both clients; `force_disconnect` cuts it off | [s1] |
+| Brief freeze (200 ms) | No fence | [s1] |
+| Name takeover | Bind refused while the old binding exists; unregister returns the dead id; rebind succeeds; lookups return the new id | [s1] |
+| Reaching the replacement | The replacement reaches the root and the client in 0 to 1 ms; neither existing client reaches the replacement, not even a plain ping at 30 s, although it lists the replacement's locality. Cause not established | [s1] |
+
+### 3.5 Design rules that follow
 
 1. **Never wait unbounded on a call to a host.** Abandon it once HPX shows the host fenced, and
    record the abandonment [langX].
@@ -209,18 +227,17 @@ Read in the HPX source at `161df7fc6`. Stage 1 measures each row.
 
 ## 4. Hypotheses
 
-| ID | Hypothesis | Stage | Falsified if |
-| --- | --- | --- | --- |
-| H1 | A plain call to a component on a killed host does not resolve by itself while the host is only fenced (from langX's in-flight result) | 1 | P1 returns a value or an error within the bound in F1 before `force_disconnect` |
-| H2 | A name bound by a killed host stays bound to the dead id [src] | 1 | P4 returns no id, or a live one, after F1 |
-| H3 | A resumed zombie host still answers; only a check above HPX rejects its results [langX] | 1 | P5 shows no answer from the zombie in F3 |
-| H4 | A replacement can take over a dead host's name only after the old binding is removed [src] | 1 | P6 binds without unregistering, or fails after unregistering |
-| H5 | Owner epochs and snapshots give the failure-free result under F1 to F7 | 2 | Any run fails G1, G2 or G3 |
-| H6 | Recovery time follows the number of recomputed steps | 2 | Recovery time does not grow with recomputed steps |
-| H7 | Failure-free cost of owner epochs and snapshots is small relative to a stencil step | 2 | Cost above 10 percent of step time at the chosen grain size |
+| ID | Hypothesis | Stage | Falsified if | Outcome |
+| --- | --- | --- | --- | --- |
+| H1 | A plain call to a component on a killed host does not resolve by itself while the host is only fenced (from langX's in-flight result) | 1 | P1 returns a value or an error within the bound in F1 before `force_disconnect` | Falsified for new calls (error in 2 ms); holds for calls in flight at the kill [s1] |
+| H2 | A name bound by a killed host stays bound to the dead id [src] | 1 | P4 returns no id, or a live one, after F1 | Holds, 30/30 [s1] |
+| H3 | A resumed zombie host still answers; only a check above HPX rejects its results [langX] | 1 | P5 shows no answer from the zombie in F3 | Holds, 30/30 [s1] |
+| H4 | A replacement can take over a dead host's name only after the old binding is removed [src] | 1 | P6 binds without unregistering, or fails after unregistering | Holds, 30/30 [s1] |
+| H5 | Owner epochs and snapshots give the failure-free result under F1 to F7 | 2 | Any run fails G1, G2 or G3 | Open |
+| H6 | Recovery time follows the number of recomputed steps | 2 | Recovery time does not grow with recomputed steps | Open |
+| H7 | Failure-free cost of owner epochs and snapshots is small relative to a stencil step | 2 | Cost above 10 percent of step time at the chosen grain size | Open |
 
-H1 to H4 are expectations from langX and the source, not claims. Stage 1 replaces them with
-measurements.
+H1 to H4 were expectations from langX and the source; the outcomes come from stage 1, job 225624.
 
 ---
 
@@ -307,24 +324,41 @@ after the root's `force_disconnect` of the host. The source predicts different a
 | In-flight call (F2) | 30 s, as langX | `ready` or `not_ready` at the bound |
 
 A wait that reaches its bound is recorded as `no_answer`, never retried silently. Each probe prints
-one line, `R: scenario=<F> phase=<fenced|removed> probe=<P> result=<...> t_ms=<...>`. Poll timeout
+one line, `R: scenario=<F> phase=<P> probe=<P> role=<R> result=<...> t_ms=<...>`, with phases
+`before`, `fenced`, `resumed`, `removed` and `replaced`. Poll timeout
 500 ms through the testing hook on every locality.
 
 ### 7.3 Matrix
 
-| Scenario | Probes | Expected |
-| --- | --- | --- |
-| F0 | P1 to P4 | All answer; P3 `admitted`; control |
-| F1 | P1 to P4 | P1 `no_answer` while fenced, `error:locality_was_disconnected` after removal (H1, [src]); P2 `target_fenced`; P3 `rejected_fenced`; P4 `id_old` (H2) |
-| F2 | in-flight call, P1, P2 | In-flight call `not_ready` at 30 s [langX]; new calls as in F1 |
-| F3 | P1 to P5 | Zombie answers P1 (H3); P2 from `client` `target_fenced`; P5 shows what `client2` sees |
-| F4 | P1 to P5 | No eviction [langX, `cc2be553`]; all answer |
-| F5 | P4, P6 | Bind without unregister fails; bind after unregister succeeds; P4 `id_new` (H4) |
+| Scenario | Probes | Expected | Measured [s1] |
+| --- | --- | --- | --- |
+| F0 | P1 to P4 | All answer; P3 `admitted`; control | As expected |
+| F1 | P1 to P4 | P1 `no_answer` while fenced, `error:locality_was_disconnected` after removal (H1, [src]); P2 `target_fenced`; P3 `rejected_fenced`; P4 `id_old` (H2) | P1 `error:locality_was_disconnected` already while fenced; the rest as expected |
+| F2 | in-flight call, P1, P2 | In-flight call `not_ready` at 30 s [langX]; new calls as in F1 | As expected, for plain and fenced in-flight calls |
+| F3 | P1 to P5 | Zombie answers P1 (H3); P2 from `client` `target_fenced`; P5 shows what `client2` sees | As expected; `client2` sees the same answers as `client` |
+| F4 | P1 to P5 | No eviction [langX, `cc2be553`]; all answer | As expected |
+| F5 | P4, P6 | Bind without unregister fails; bind after unregister succeeds; P4 `id_new` (H4) | As expected; then neither client reaches the replacement |
 
 ### 7.4 Exit criterion
 
 Every cell of 7.3 recorded on `161df7fc6`: a 2-trial smoke run, then 30 trials per scenario, one
 node. Write-up in `docs/results/stage1.md`. Each new gap is drafted as an upstream issue or comment.
+
+Met: job 225624, 180 trials, [`results/stage1.md`](results/stage1.md).
+
+### 7.5 Follow-up: reaching a replacement
+
+In every F5 trial of job 225624, neither existing client reached the replacement locality, while
+the replacement reached both the root and the client. Stage 2 depends on spare hosts that existing
+localities can reach, so the cause is separated first, 30 trials each:
+
+| Variant | What it separates |
+| --- | --- |
+| Late joiner, no failure | Whether any locality that connects after the clients is unreachable |
+| F5 without the root's `force_disconnect` | Whether removing the dead host matters |
+| F5 without the replacement's pings | Whether the replacement's own first contact matters (1 of 2 smoke trials without them reached it) |
+
+If a variant isolates an HPX behaviour, it is drafted as an upstream issue with a reproducer.
 
 ---
 
@@ -431,7 +465,7 @@ Stages run in order; each ends with a write-up in `docs/results/`.
 
 | Stage | Exit criterion |
 | --- | --- |
-| 1: stateful component | Section 7.4 |
+| 1: stateful component | Section 7.4; met, follow-up 7.5 open |
 | 2: stateful 1D stencil | Section 8.6 |
 | 3: Octo-Tiger | The stage 2 recovery on a real application; criterion set after stage 2 |
 | 4: LLM runtime with resident KV cache | Recovery of a request's KV cache on an open model; criterion set after stage 2 |
@@ -462,8 +496,9 @@ stage NN; `bench/setup/` the Rostam environment and HPX build; `docs/` the plan,
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Calls to a dead host hang | High | Bound every wait; abandon on fence (3.4) |
-| Names outlive their host [src] | High | Ownership table is authoritative (3.4 rule 6); P4 and P6 measure it first |
+| Calls in flight to a dead host never return [s1] | High | Bound every wait; abandon on fence (3.5) |
+| Names outlive their host [s1] | High | Ownership table is authoritative (3.5 rule 6); the replacement unregisters and rebinds (8.2) |
+| Existing localities cannot reach a replacement locality [s1] | High | Follow-up 7.5 before stage 2 depends on a replacement |
 | Snapshot needs the component local [src] | Medium | Each host snapshots its own components and sends the value (6.3) |
 | Global rollback hides per-partition costs | Medium | Report recomputed steps; compare local recovery later |
 | Detection too slow without the testing hook | Medium | Report the hook value |
@@ -473,12 +508,15 @@ stage NN; `bench/setup/` the Rostam environment and HPX build; `docs/` the plan,
 
 ## 15. Open questions for HPX maintainers
 
-1. What should a call to a component on a fenced, not yet removed host return: an error, or
-   nothing until the caller gives up?
+1. A new call to a killed, fenced host fails with `locality_was_disconnected`, but a call in
+   flight at the kill never returns [s1]. Is the in-flight case meant to stay unresolved
+   (hpx#7834)?
 2. Should removing a locality also drop or mark AGAS names bound to its objects?
 3. Is unregister then register the intended way for a replacement to take over a name?
 4. Would an "is epoch E still live for target T" check at completion time fit in HPX?
 5. Should admission reject an epoch that does not match the target's current epoch (hpx#7834)?
+6. Is a locality that connects after another one was killed and removed meant to be reachable
+   from the localities already running (section 7.5)?
 
 ---
 
