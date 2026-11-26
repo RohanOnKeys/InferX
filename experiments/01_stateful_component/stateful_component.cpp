@@ -118,6 +118,13 @@ using fenced_slow_update_action =
 HPX_REGISTER_ACTION_DECLARATION(fenced_slow_update_action)
 HPX_REGISTER_ACTION(fenced_slow_update_action)
 
+/// Returns the id of the locality it runs on.
+std::uint32_t inferx_ping()
+{
+    return hpx::get_locality_id();
+}
+HPX_PLAIN_ACTION(inferx_ping, ping_action)
+
 namespace {
 
     using clk = std::chrono::steady_clock;
@@ -339,7 +346,8 @@ namespace {
         {
             auto const t1 = clk::now();
             auto u = hpx::unregister_with_basename(name, seq);
-            say("replaced", "P6.unregister", settle(u, bound_s), ms_since(t1));
+            std::string const r = settle(u, bound_s);
+            say("replaced", "P6.unregister", r, ms_since(t1));
 
             auto const t2 = clk::now();
             std::string second;
@@ -356,6 +364,12 @@ namespace {
             }
             say("replaced", "P6.rebind", second, ms_since(t2));
         }
+        {
+            auto const t3 = clk::now();
+            auto f = hpx::async<read_action>(id);
+            std::string const r = settle(f, bound_s);
+            say("replaced", "P6.self", r, ms_since(t3));
+        }
         put("replacement.ready", std::to_string(hpx::get_locality_id()));
         for (;;)
             nap(1000);
@@ -363,11 +377,12 @@ namespace {
 
     /// P1 and P4, used by both clients.
     void probe_p1(std::string const& phase, hpx::id_type const& comp,
-        char const* label = "P1")
+        char const* label = "P1", int bound = 0)
     {
         auto const t0 = clk::now();
         auto f = hpx::async<read_action>(comp);
-        say(phase, label, settle(f, bound_s), ms_since(t0));
+        std::string const r = settle(f, bound > 0 ? bound : bound_s);
+        say(phase, label, r, ms_since(t0));
     }
 
     void probe_p4(std::string const& phase)
@@ -443,7 +458,8 @@ namespace {
         {
             auto const t0 = clk::now();
             auto f = sv::dispatch_work<read_action>(comp, host.join_epoch);
-            say(phase, "P2", settle(f, bound_s), ms_since(t0));
+            std::string const r = settle(f, bound_s);
+            say(phase, "P2", r, ms_since(t0));
             say(phase, "P3",
                 outcome(sv::check_admission(host.locality, host.join_epoch)),
                 0);
@@ -525,8 +541,9 @@ namespace {
             while (ms_since(t0) < inflight_s * 1000.0 &&
                 !(plain.is_ready() && fenced.is_ready()))
                 nap(50);
-            say("fenced", "inflight.plain", settle(plain, 0), ms_since(t0));
-            say("fenced", "inflight.fenced", settle(fenced, 0), ms_since(t0));
+            double const waited = ms_since(t0);
+            say("fenced", "inflight.plain", settle(plain, 0), waited);
+            say("fenced", "inflight.fenced", settle(fenced, 0), waited);
             probes("fenced");
             remove_host();
             probes("removed");
@@ -557,7 +574,22 @@ namespace {
             put("client.want_replacement", "1");
             if (!wait_file("replacement.ready", 60))
                 say("replaced", "replacement", "no_answer", 0);
+            auto const repl_loc = static_cast<std::uint32_t>(
+                std::stoul(get("replacement.ready")));
+            {
+                auto const t0 = clk::now();
+                auto f = hpx::async<ping_action>(
+                    hpx::naming::get_id_from_locality_id(repl_loc));
+                std::string const r = settle(f, bound_s);
+                say("replaced", "ping", r, ms_since(t0));
+            }
             probe_p4("replaced");
+            {
+                auto f = hpx::find_from_basename(name, seq);
+                if (f.wait_for(std::chrono::seconds(bound_s)) ==
+                    hpx::future_status::ready)
+                    probe_p1("replaced", f.get(), "P4.call30", inflight_s);
+            }
             ask_client2("replaced");
         }
         say("end", "end", "done", 0);
