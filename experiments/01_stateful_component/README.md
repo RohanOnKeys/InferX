@@ -24,7 +24,7 @@ Codes used in this document (full list: [plan, codes](../../docs/plan.md#codes))
 | H1 to H4 | stage 1 hypotheses, [plan section 4](../../docs/plan.md#4-hypotheses) |
 
 **Status:** done, 30 trials per scenario (job 225624); results in
-[`docs/results/stage1.md`](../../docs/results/stage1.md). Follow-up on reaching a replacement:
+[`docs/results/stage1.md`](../../docs/results/stage1.md). Follow-up variants (job 225632):
 [plan section 7.5](../../docs/plan.md#75-follow-up-reaching-a-replacement). Design: [plan section 7](../../docs/plan.md#7-stage-1-one-stateful-component-under-supervision).
 HPX: master `161df7fc6`.
 

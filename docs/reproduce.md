@@ -19,6 +19,7 @@ Source `bench/setup/rostam_env.sh` in the shell before `sbatch`; Slurm passes th
 | --- | --- | --- | --- |
 | [`stage1.md`](results/stage1.md) | smoke, 2 trials per scenario | `sbatch experiments/01_stateful_component/stage1.sbatch` | 225622 (`3597e17`), 225623 (`7e6f02a`) |
 | [`stage1.md`](results/stage1.md) | full run, F0 to F5, 30 trials each | `TRIALS=30 sbatch --time=03:00:00 experiments/01_stateful_component/stage1.sbatch` | 225624 (`4b0e943`) |
+| [`stage1.md`](results/stage1.md) | follow-up variants J0, J0q, F5a, F5b | `SCENARIOS="J0 J0q F5a F5b" TRIALS=30 sbatch --time=02:00:00 experiments/01_stateful_component/stage1.sbatch` (smoke: without `TRIALS`) | 225626 smoke, 225632 (`d3f1b8a`) |
 | [`stage1.md`](results/stage1.md) | tables from a job log | `bash experiments/01_stateful_component/summarize.sh stage1_<job>.out` | |
 
 Job 225622 predates the probe timing fix (PR #6); its results are valid, its probe times are not.
