@@ -16,6 +16,11 @@ Codes used in this document (full list: [plan, codes](../../docs/plan.md#codes))
 | P4 | name lookup: `find_from_basename` for the component's name, then P1 on the id it returns |
 | P5 | zombie answer: whether a resumed host answers, from a client that observed the fence and one that did not |
 | P6 | name takeover: whether a replacement can bind the dead host's name, with and without unregistering first |
+| J0 | late joiner: no failure; a new locality joins after the clients and pings the root and the client first |
+| J0q | J0 without the joiner's first pings |
+| F5a | F5 without the root's `force_disconnect` of the dead host |
+| F5b | F5 without the replacement's first pings |
+| J4 | joiner lookup: P4 for the joiner's own name, then P1 on the id it returns |
 | H1 to H4 | stage 1 hypotheses, [plan section 4](../../docs/plan.md#4-hypotheses) |
 
 **Status:** done, 30 trials per scenario (job 225624); results in
@@ -49,6 +54,8 @@ Does a resumed old incarnation still answer, and can a replacement take over the
 | F3 | P1 to P5 |
 | F4 | P1 to P5 |
 | F5 | P4, P6 |
+| J0, J0q | ping, J4 (follow-up, plan section 7.5) |
+| F5a, F5b | P4, P6, ping (follow-up, plan section 7.5) |
 
 The client runs the probes twice: once it sees the host fenced, and again after the root's
 `force_disconnect` of the host. Probe waits are bounded at 10 s, the in-flight call in F2 at 30 s;
@@ -82,7 +89,8 @@ sbatch experiments/01_stateful_component/stage1.sbatch                        # 
 TRIALS=30 sbatch --time=03:00:00 experiments/01_stateful_component/stage1.sbatch   # full run, about 75 min
 ```
 
-`SCENARIOS="F1 F3"` narrows a run. Each probe prints one line,
+`SCENARIOS="F1 F3"` narrows a run. The follow-up variants run with
+`SCENARIOS="J0 J0q F5a F5b" TRIALS=30 sbatch --time=03:00:00 experiments/01_stateful_component/stage1.sbatch`. Each probe prints one line,
 `R: scenario=<F> phase=<phase> probe=<P> role=<role> result=<r> t_ms=<t>`, and each trial ends with
 a `RESULT` line giving the client's exit. Results go to `docs/results/stage1.md`, and the job behind
 each one to [`docs/reproduce.md`](../../docs/reproduce.md).

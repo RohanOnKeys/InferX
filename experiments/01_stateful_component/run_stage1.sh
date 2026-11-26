@@ -54,8 +54,9 @@ for TRIAL in $(seq 1 "$TRIALS"); do
     F4) kill -STOP $HOST; touch "$D/host.stopped"
         sleep "$(awk "BEGIN{print $STOP_MS/1000}")"
         kill -CONT $HOST; touch "$D/host.resumed" ;;
-    F5) kill -9 $HOST; touch "$D/host.killed"
+    F5|F5a|F5b) kill -9 $HOST; touch "$D/host.killed"
         if wait_f "$D/client.want_replacement"; then start replacement; REPL=$!; fi ;;
+    J0|J0q) if wait_f "$D/client.want_replacement"; then start replacement; REPL=$!; fi ;;
   esac
 
   # Bounded wait for the client; 300 s covers every probe bound in sequence.

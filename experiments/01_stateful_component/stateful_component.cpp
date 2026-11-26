@@ -23,7 +23,12 @@
 /// force_disconnect of the host), "replaced" (F5: after the replacement).
 /// Plan: docs/plan.md, section 7.
 ///
-/// Options: --r-role, --r-scenario F0..F5, --r-dir DIR (handshake files),
+/// Follow-up scenarios (plan section 7.5): J0 a late joiner with no failure,
+/// J0q the same without the joiner's first pings, F5a F5 without the root's
+/// force_disconnect, F5b F5 without the replacement's first pings. The joiner
+/// binds "/inferx/joiner/"; its lookup and call print as J4 and J4.call.
+///
+/// Options: --r-role, --r-scenario F0..F5|J0|J0q|F5a|F5b, --r-dir DIR,
 /// --r-poll-ms N (failure-detection poll timeout, testing hook),
 /// --r-bound-s N (probe bound, default 10), --r-inflight-s N (F2 bound,
 /// default 30). Everything else goes to HPX.
@@ -131,6 +136,7 @@ namespace {
     namespace sv = hpx::supervision;
 
     char const* const name = "/inferx/state/";
+    char const* const joiner_name = "/inferx/joiner/";
     constexpr std::size_t seq = 0;
 
     std::string dir, role, scenario;
@@ -139,6 +145,25 @@ namespace {
     int inflight_s = 30;
     sv::registry handle;
     std::uint64_t own_epoch = 0;
+
+    /// J0, J0q: a late joiner and no failure.
+    bool is_join()
+    {
+        return scenario == "J0" || scenario == "J0q";
+    }
+
+    /// Whether the replacement or joiner pings the root and the client before
+    /// the client calls it (not in F5b and J0q).
+    bool repl_pings()
+    {
+        return scenario != "F5b" && scenario != "J0q";
+    }
+
+    /// F5 and its variants F5a, F5b: the host is killed and replaced.
+    bool is_replace()
+    {
+        return scenario == "F5" || scenario == "F5a" || scenario == "F5b";
+    }
 
     std::string arg(int argc, char** argv, char const* key, char const* dflt)
     {
@@ -346,20 +371,31 @@ namespace {
         hpx::id_type const id = make_state();
         auto const t0 = clk::now();
 
-        // Bind without unregistering the dead host's binding first.
-        std::string first;
-        try
+        if (is_join())
         {
-            first = hpx::register_with_basename(name, id, seq).get() ?
-                "bound" :
-                "refused";
+            bool const ok =
+                hpx::register_with_basename(joiner_name, id, seq).get();
+            say("replaced", "J6.bind", ok ? "bound" : "refused", ms_since(t0));
         }
-        catch (hpx::exception const& e)
+
+        // Bind without unregistering the dead host's binding first. The
+        // joiner leaves the host's name alone.
+        std::string first = "bound";
+        if (!is_join())
         {
-            first = std::string("error:") +
-                hpx::get_error_name(hpx::get_error(e));
+            try
+            {
+                first = hpx::register_with_basename(name, id, seq).get() ?
+                    "bound" :
+                    "refused";
+            }
+            catch (hpx::exception const& e)
+            {
+                first = std::string("error:") +
+                    hpx::get_error_name(hpx::get_error(e));
+            }
+            say("replaced", "P6.bind", first, ms_since(t0));
         }
-        say("replaced", "P6.bind", first, ms_since(t0));
 
         if (first != "bound")
         {
@@ -389,9 +425,12 @@ namespace {
             std::string const r = settle(f, bound_s);
             say("replaced", "P6.self", r, ms_since(t3));
         }
-        ping("replaced", "P6.ping_root", 0);
-        ping("replaced", "P6.ping_client",
-            static_cast<std::uint32_t>(std::stoul(get("client.ready"))));
+        if (repl_pings())
+        {
+            ping("replaced", "P6.ping_root", 0);
+            ping("replaced", "P6.ping_client",
+                static_cast<std::uint32_t>(std::stoul(get("client.ready"))));
+        }
         put("replacement.ready", std::to_string(hpx::get_locality_id()));
         for (;;)
             nap(1000);
@@ -407,14 +446,15 @@ namespace {
         say(phase, label, r, ms_since(t0));
     }
 
-    void probe_p4(std::string const& phase)
+    void probe_p4(std::string const& phase, char const* nm = name,
+        std::string const& label = "P4")
     {
         auto const t0 = clk::now();
-        auto f = hpx::find_from_basename(name, seq);
+        auto f = hpx::find_from_basename(nm, seq);
         if (f.wait_for(std::chrono::seconds(bound_s)) !=
             hpx::future_status::ready)
         {
-            say(phase, "P4", "no_answer", ms_since(t0));
+            say(phase, label.c_str(), "no_answer", ms_since(t0));
             return;
         }
         hpx::id_type found;
@@ -424,14 +464,14 @@ namespace {
         }
         catch (hpx::exception const& e)
         {
-            say(phase, "P4",
+            say(phase, label.c_str(),
                 std::string("error:") + hpx::get_error_name(hpx::get_error(e)),
                 ms_since(t0));
             return;
         }
-        say(phase, "P4", "id_loc:" + std::to_string(loc_of(found)),
+        say(phase, label.c_str(), "id_loc:" + std::to_string(loc_of(found)),
             ms_since(t0));
-        probe_p1(phase, found, "P4.call");
+        probe_p1(phase, found, (label + ".call").c_str());
     }
 
     void run_client2()
@@ -454,6 +494,8 @@ namespace {
             std::string const phase = get(req);
             probe_p1(phase, comp);
             probe_p4(phase);
+            if (is_join() && phase == "replaced")
+                probe_p4(phase, joiner_name, "J4");
             put(req + ".done", "1");
         }
     }
@@ -587,12 +629,18 @@ namespace {
             nap(3000);    // several detection windows after SIGCONT
             probes("resumed");
         }
-        else if (scenario == "F5")
+        else if (is_replace() || is_join())
         {
-            wait_fenced("host.killed", 30);
-            probe_p4("fenced");
-            remove_host();
-            probe_p4("removed");
+            if (is_replace())
+            {
+                wait_fenced("host.killed", 30);
+                probe_p4("fenced");
+                if (scenario != "F5a")
+                {
+                    remove_host();
+                    probe_p4("removed");
+                }
+            }
             put("client.want_replacement", "1");
             if (!wait_file("replacement.ready", 60))
                 say("replaced", "replacement", "no_answer", 0);
@@ -601,7 +649,11 @@ namespace {
             say("replaced", "known", known_localities(), 0);
             ping("replaced", "ping_root", 0);
             ping("replaced", "ping", repl_loc);
-            probe_p4("replaced");
+            if (is_join())
+                probe_p4("replaced", joiner_name, "J4");
+            else
+                probe_p4("replaced");
+            if (scenario == "F5")
             {
                 auto f = hpx::find_from_basename(name, seq);
                 if (f.wait_for(std::chrono::seconds(bound_s)) ==
