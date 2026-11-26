@@ -18,7 +18,9 @@ Codes used in this document (full list: [plan, codes](../../docs/plan.md#codes))
 | P6 | name takeover: whether a replacement can bind the dead host's name, with and without unregistering first |
 | H1 to H4 | stage 1 hypotheses, [plan section 4](../../docs/plan.md#4-hypotheses) |
 
-**Status:** harness written, not yet run. Design: [plan section 7](../../docs/plan.md#7-stage-1-one-stateful-component-under-supervision).
+**Status:** done, 30 trials per scenario (job 225624); results in
+[`docs/results/stage1.md`](../../docs/results/stage1.md). Follow-up on reaching a replacement:
+[plan section 7.5](../../docs/plan.md#75-follow-up-reaching-a-replacement). Design: [plan section 7](../../docs/plan.md#7-stage-1-one-stateful-component-under-supervision).
 HPX: master `161df7fc6`.
 
 ## Question
@@ -64,6 +66,7 @@ Expected answers, with the reason for each, are in
 | `run_stage1.sh` | runs one scenario a given number of trials on one host and prints the `R:` lines |
 | `stage1.sbatch` | builds the harness against `HPX_INSTALL` and runs the scenarios on one Rostam node |
 | `CMakeLists.txt` | standalone build; needs only an HPX install with supervision |
+| `summarize.sh` | one line per distinct probe result from a job log, with counts and min and max times |
 | `_runs/` | raw output per job, ignored by git |
 
 The process scaffolding follows langX
@@ -76,7 +79,7 @@ From the repository root on Rostam:
 ```bash
 . bench/setup/rostam_env.sh
 sbatch experiments/01_stateful_component/stage1.sbatch                        # smoke: 2 trials each
-TRIALS=30 sbatch --time=06:00:00 experiments/01_stateful_component/stage1.sbatch   # full run
+TRIALS=30 sbatch --time=03:00:00 experiments/01_stateful_component/stage1.sbatch   # full run, about 75 min
 ```
 
 `SCENARIOS="F1 F3"` narrows a run. Each probe prints one line,
