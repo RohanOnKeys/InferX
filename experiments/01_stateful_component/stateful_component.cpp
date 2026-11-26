@@ -250,6 +250,25 @@ namespace {
         }
     }
 
+    /// Pings locality  loc with a plain action and prints the result.
+    void ping(std::string const& phase, char const* label, std::uint32_t loc)
+    {
+        auto const t0 = clk::now();
+        auto f = hpx::async<ping_action>(
+            hpx::naming::get_id_from_locality_id(loc));
+        std::string const r = settle(f, bound_s);
+        say(phase, label, r, ms_since(t0));
+    }
+
+    /// Locality ids this locality currently knows, as "0,2,3,4".
+    std::string known_localities()
+    {
+        std::string s;
+        for (auto const& id : hpx::find_all_localities())
+            s += (s.empty() ? "" : ",") + std::to_string(loc_of(id));
+        return s;
+    }
+
     void init_supervision(int discovery_ms)
     {
         sv::testing::set_failure_detection_poll_timeout_for_testing(
@@ -370,6 +389,9 @@ namespace {
             std::string const r = settle(f, bound_s);
             say("replaced", "P6.self", r, ms_since(t3));
         }
+        ping("replaced", "P6.ping_root", 0);
+        ping("replaced", "P6.ping_client",
+            static_cast<std::uint32_t>(std::stoul(get("client.ready"))));
         put("replacement.ready", std::to_string(hpx::get_locality_id()));
         for (;;)
             nap(1000);
@@ -576,13 +598,9 @@ namespace {
                 say("replaced", "replacement", "no_answer", 0);
             auto const repl_loc = static_cast<std::uint32_t>(
                 std::stoul(get("replacement.ready")));
-            {
-                auto const t0 = clk::now();
-                auto f = hpx::async<ping_action>(
-                    hpx::naming::get_id_from_locality_id(repl_loc));
-                std::string const r = settle(f, bound_s);
-                say("replaced", "ping", r, ms_since(t0));
-            }
+            say("replaced", "known", known_localities(), 0);
+            ping("replaced", "ping_root", 0);
+            ping("replaced", "ping", repl_loc);
             probe_p4("replaced");
             {
                 auto f = hpx::find_from_basename(name, seq);
